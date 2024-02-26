@@ -1,0 +1,46 @@
+#
+# Paths to these resources must be set by the users
+#
+reference: "resources/GRCh38_no_alt_analysis_set.GCA_000001405.15.fna"
+smrest_pipeline: "software/smrest/workflow/Snakefile"
+smrest: "software/smrest/target/release/smrest"
+aspera_id: "resources/asperaweb_id_dsa.openssh"
+
+#
+# These resources are all downloaded automatically by the workflow(s) and do not need to be set
+#
+
+# data
+mutect2_pon: "resources/1000g_pon.hg38.vcf.gz"
+gnomad_af_vcf: "resources/af-only-gnomad.hg38.vcf.gz"
+
+# software
+gatk: "software/gatk-4.4.0.0"
+fastq_dump: "software/sratoolkit.3.0.7-ubuntu64/bin/fastq-dump"
+
+#
+# config for smrest pipeline
+#
+giab_hc_bed: "resources/GRCh38_notinalldifficultregions.bed"
+gnomad_vcf: "resources/af-only-gnomad.hg38.vcf.gz"
+gnomad_common: "resources/af-only-gnomad.hg38.p001_biallelic_snps.vcf.gz"
+
+#
+# Define truth data/parameters
+#
+truth_vcf: 
+    "COLO829": "resources/COLO-829-NovaSeq--COLO-829BL-NovaSeq.snv.indel.final.v6.annotated.primatives.vcf"
+    "HCC1395": "resources/HCC1395-high-confidence_sSNV_in_HC_regions_v1.2.vcf"
+
+analysis_region_bed:
+    "COLO829": "resources/GRCh38_notinalldifficultregions.bed"
+    "HCC1395": "resources/GIAB_SEQC_regions.bed"
+
+truth_sample_name: 
+    "COLO829": "COLO-829-NovaSeq"
+
+#
+# Analysis thresholds
+#
+min_vaf: 0.1
+min_somatic_qual: 20

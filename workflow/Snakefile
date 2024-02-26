@@ -1,0 +1,156 @@
+from snakemake.utils import min_version
+min_version("6.0")
+
+import glob
+import os
+import numpy as np
+
+configfile: "config.yaml"
+
+include: "rules/defaults.smk"
+include: "rules/common.smk"
+include: "rules/data.smk"
+include: "rules/software.smk"
+include: "rules/subsampling.smk"
+include: "rules/mutect2_to.smk"
+include: "rules/mutect2_tn.smk"
+include: "rules/clairS.smk"
+include: "rules/analysis.smk"
+include: "rules/simulations.smk"
+include: "rules/figures.smk"
+
+ext_module_path = os.getcwd() + "/" + config['smrest_pipeline']
+module smrest_workflow:
+    snakefile: ext_module_path
+    config: config
+    skip_validation: True
+
+use rule * from smrest_workflow as external_smrest_*
+
+def get_max_normal_depth(sample, tech):
+    thresholds = { "COLO829": { "ont": 57, "illumina": 43 },
+                   "HCC1395": { "ont": 47, "illumina": 0 },
+                   "cliveome-d4.1.0-sup": { "ont": 68 }
+                 }
+
+    return thresholds[sample][tech]
+
+def gen_COLO829_purity_experiments(wildcards):
+    total_depth = 80
+    depth_step = 4
+    min_depth = 2
+    programs = [ "smrest", "clairS", "mutect2_tn", "mutect2_to" ]
+    technology = [ "ont", "ont", "illumina", "illumina" ]
+    analysis_regions =  [ "HC", "HC-ont-called" ]
+    sample = "COLO829"
+    out = list()
+
+    for tdepth in range(min_depth, total_depth, depth_step):
+        ndepth = total_depth - tdepth
+
+        # cannot go above this depth, there would be too few reads to sample from
+
+        for (program, tech) in zip(programs, technology):
+            if ndepth > get_max_normal_depth(sample, tech):
+                continue
+            
+            for bed in analysis_regions:
+                fn = f"analysis/annotated/{sample}_{tdepth}_{sample}BL_{ndepth}_rep1.{program}.{tech}.annotated-{bed}.tsv"
+                out.append(fn)
+    return out
+
+rule COLO829_purity_experiments:
+    input:
+        gen_COLO829_purity_experiments
+
+def gen_comparison_experiments(wildcards):
+
+    depths = [ 20, 40 ]
+    analysis_regions =  [ "HC", "HC-ont-called", "HC-both-called" ]
+    programs = [ "smrest", "clairS", "smrest", "clairS", "mutect2_tn", "mutect2_to" ]
+    technology = [ "ont", "ont", "pacbio", "pacbio", "illumina", "illumina" ]
+    
+    out = list()
+    for sample in [ "COLO829", "HCC1395" ]:
+        for hdepth in depths:
+            tdepth = hdepth
+            ndepth = hdepth
+
+            for (program, tech) in zip(programs, technology):
+
+                for bed in analysis_regions:
+                    fn = f"analysis/annotated/{sample}_{tdepth}_{sample}BL_{ndepth}_rep1.{program}.{tech}.annotated-{bed}.tsv"
+                    out.append(fn)
+
+    return out
+
+rule comparison_experiments:
+    input:
+        gen_comparison_experiments
+
+def gen_tmb_experiments(wildcards):
+    depth_step = 8
+    min_depth = 2
+    max_depth = 82
+    qual_t = [ 20 ]
+    tech = "ont"
+    out = list()
+
+    for depth in range(min_depth, max_depth+1, depth_step):
+        for sample in [ "cliveome-d4.1.0-sup" ]:
+            if depth > get_max_normal_depth(sample, tech):
+                continue
+
+            for q in qual_t:
+                fn = f"smrest_calls/{sample}_{depth}_rep1.{tech}/{sample}_{depth}_rep1.{tech}.whatshap_phased.final_q{q}_pass_calls.vcf"
+                out.append(fn)
+        
+        for sample in [ "COLO829" ]:
+            for purity in [ 0.3, 0.4, 0.5, 0.6, 0.7 ]:
+                tdepth = depth * purity
+                ndepth = depth - tdepth
+            
+                if ndepth > get_max_normal_depth(sample, tech):
+                    continue
+
+                pn = f"{sample}_{tdepth:.3}_{sample}BL_{ndepth:.3}_rep1.{tech}"
+                for q in qual_t:
+                    fn = f"smrest_calls/{pn}/{pn}.whatshap_phased.final_q{q}_pass_calls.vcf"
+                    out.append(fn)
+
+    return out
+
+rule tmb_summary:
+    output:
+        "analysis/summary/tmb_estimates.tsv"
+    params:
+        memory_per_thread="4G",
+        extra_cluster_opt="",
+        script=srcdir("scripts/tmb_estimator.py")
+    shell:
+        "python {params.script} --qual {config[min_somatic_qual]} > {output}"
+
+rule tmb_experiments:
+    input:
+        gen_tmb_experiments
+
+
+# run rules to download various datasets, utilities, references
+# this is provided separately as generally this needs internet access
+rule init:
+    input:
+        [ config['gatk'], 
+          config['fastq_dump'],
+          config['mutect2_pon'],
+          config['gnomad_af_vcf'],
+          config['gnomad_common'],
+          config['truth_vcf']['COLO829'],
+          config['truth_vcf']['HCC1395'],
+          config['analysis_region_bed']['COLO829'],
+          config['analysis_region_bed']['HCC1395'],
+          ]
+
+ruleorder: index_vcf > external_smrest_tabix_vcf
+ruleorder: run_mutect2_region > run_mutect2_tn_region
+ruleorder: mutect2_calculate_contamination > mutect2_tn_calculate_contamination
+ruleorder: filter_mutect2_calls > filter_mutect2_tn_calls
