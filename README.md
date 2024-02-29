@@ -1,6 +1,6 @@
 # smrest analysis pipeline
 
-This is a snakemake workflow that runs the experiments described in [Simpson, J.T., Detecting Somatic Mutations Without Matched Normal Samples Using Long Reads, BioRxiv](TODO).
+This is a snakemake workflow that runs the experiments described in [Simpson, J.T., Detecting Somatic Mutations Without Matched Normal Samples Using Long Reads, BioRxiv](https://www.biorxiv.org/content/10.1101/2024.02.26.582089v1).
 
 ## Prerequisites
 
